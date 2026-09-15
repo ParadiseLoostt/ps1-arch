@@ -309,7 +309,7 @@ function createHead(): THREE.Group {
   hoodGeo.toNonIndexed();
   const hoodMat = createMaterial(PALETTES[currentPalette].hood, 'hood');
   const hood = new THREE.Mesh(hoodGeo, hoodMat);
-  hood.position.set(0, HEAD_SIZE * 0.5, -0.02);
+  hood.position.set(0, HEAD_SIZE * 0.85, -0.02);
   hood.rotation.x = -0.2;
   head.add(hood);
 
@@ -317,7 +317,7 @@ function createHead(): THREE.Group {
   const brimGeo = new THREE.BoxGeometry(HEAD_SIZE * 1.1, 0.04, HEAD_SIZE * 0.6);
   brimGeo.toNonIndexed();
   const brim = new THREE.Mesh(brimGeo, hoodMat);
-  brim.position.set(0, HEAD_SIZE * 0.2, HEAD_SIZE * 0.15);
+  brim.position.set(0, HEAD_SIZE * 0.55, HEAD_SIZE * 0.15);
   head.add(brim);
 
   // Hair peeking out (small boxes at sides)
@@ -359,20 +359,8 @@ function createTorso(): THREE.Group {
   shirt.position.z = 0.01; // Offset to avoid z-fighting
   torso.add(shirt);
 
-  // Crossed straps
-  const strapGeo = new THREE.BoxGeometry(0.04, TORSO_HEIGHT * 0.8, 0.02);
-  strapGeo.toNonIndexed();
+  // Belt strap material (used for belt and pouches)
   const strapMat = createMaterial(PALETTES[currentPalette].belt, 'belt');
-
-  const strap1 = new THREE.Mesh(strapGeo, strapMat);
-  strap1.position.set(-0.05, 0.02, TORSO_WIDTH * 0.36);
-  strap1.rotation.z = 0.4;
-  torso.add(strap1);
-
-  const strap2 = new THREE.Mesh(strapGeo, strapMat);
-  strap2.position.set(0.05, 0.02, TORSO_WIDTH * 0.36);
-  strap2.rotation.z = -0.4;
-  torso.add(strap2);
 
   // Belt
   const beltGeo = new THREE.BoxGeometry(TORSO_WIDTH * 1.05, 0.05, TORSO_WIDTH * 0.75);
@@ -550,9 +538,10 @@ function createBow(): THREE.Group {
   grip.position.set(0.1, 0, 0);
   bowGroup.add(grip);
 
-  // Position bow in left hand area
-  bowGroup.position.set(-0.45, 0.1, 0.15);
-  bowGroup.rotation.z = 0.1;
+  // Position bow at hand location (will be parented to elbow group)
+  // Hand is at y = -ARM_LENGTH * 0.48 relative to elbow
+  bowGroup.position.set(0, -ARM_LENGTH * 0.48, 0);
+  bowGroup.rotation.z = 0;
 
   return bowGroup;
 }
@@ -742,8 +731,13 @@ function buildArcher(): THREE.Group {
   torso.add(armRight);
   torso.add(legLeft);
   torso.add(legRight);
-  torso.add(bow);
   torso.add(quiver);
+
+  // Parent bow to left elbow group (hand pivot) so it follows arm poses
+  const elbowLeft = armLeft.getObjectByName('elbowLeft') as THREE.Group;
+  if (elbowLeft) {
+    elbowLeft.add(bow);
+  }
 
   archerGroup.add(torso);
 
