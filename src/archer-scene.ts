@@ -106,36 +106,48 @@ const POSE_FPS_INTERVAL = 1 / 12;
 const POSES: Record<string, Record<string, { x: number; y: number; z: number }>> = {
   Idle: {
     head: { x: 0, y: 0, z: 0 },
-    armLeft: { x: 0, y: 0, z: 0.15 },
+    // Left arm (bow arm): relaxed at side, slightly forward
+    armLeft: { x: -0.3, y: 0.1, z: 0.15 },
+    elbowLeft: { x: -0.1, y: 0, z: 0 },
+    // Right arm: relaxed at side
     armRight: { x: 0, y: 0, z: -0.15 },
-    elbowLeft: { x: -0.2, y: 0, z: 0 },
     elbowRight: { x: -0.2, y: 0, z: 0 },
     legLeft: { x: 0, y: 0, z: 0 },
     legRight: { x: 0, y: 0, z: 0 },
     kneeLeft: { x: 0, y: 0, z: 0 },
     kneeRight: { x: 0, y: 0, z: 0 },
+    // Bow rotation in hand
+    bow: { x: 0, y: 0, z: 0 },
   },
   Aim: {
     head: { x: 0, y: -0.3, z: 0 },
-    armLeft: { x: -1.2, y: 0, z: 0.3 },
-    armRight: { x: -0.8, y: 0.3, z: -0.5 },
+    // Left arm: raised forward, holding bow in front of chest
+    armLeft: { x: -1.2, y: 0.2, z: 0.3 },
     elbowLeft: { x: -0.3, y: 0, z: 0 },
-    elbowRight: { x: -0.8, y: 0, z: 0 },
+    // Right arm: brought forward to bow, hand at nock point
+    armRight: { x: -1.0, y: -0.3, z: -0.4 },
+    elbowRight: { x: -0.9, y: 0, z: 0 },
     legLeft: { x: -0.15, y: 0, z: 0.05 },
     legRight: { x: 0.15, y: 0, z: -0.05 },
     kneeLeft: { x: 0.1, y: 0, z: 0 },
     kneeRight: { x: 0, y: 0, z: 0 },
+    // Bow: vertical, string facing away from body
+    bow: { x: 0, y: Math.PI, z: 0 },
   },
   Draw: {
     head: { x: 0, y: -0.4, z: 0 },
-    armLeft: { x: -1.4, y: 0, z: 0.4 },
-    armRight: { x: -0.5, y: 0.5, z: -0.8 },
-    elbowLeft: { x: -0.2, y: 0, z: 0 },
-    elbowRight: { x: -1.2, y: 0, z: 0 },
+    // Left arm: fully extended forward
+    armLeft: { x: -1.5, y: 0.1, z: 0.4 },
+    elbowLeft: { x: -0.1, y: 0, z: 0 },
+    // Right arm: pulled back to cheek, drawing string
+    armRight: { x: -0.8, y: -0.5, z: -0.7 },
+    elbowRight: { x: -1.3, y: 0, z: 0 },
     legLeft: { x: -0.2, y: 0, z: 0.1 },
     legRight: { x: 0.2, y: 0, z: -0.1 },
     kneeLeft: { x: 0.15, y: 0, z: 0 },
     kneeRight: { x: 0.05, y: 0, z: 0 },
+    // Bow: vertical, string stretched
+    bow: { x: 0, y: Math.PI, z: 0 },
   },
 };
 
@@ -304,21 +316,43 @@ function createHead(): THREE.Group {
   mouth.position.set(0, -0.06, HEAD_SIZE * 0.46);
   head.add(mouth);
 
-  // Hood - pyramidal pointed hood
-  const hoodGeo = new THREE.ConeGeometry(HEAD_SIZE * 0.7, HEAD_SIZE * 1.2, 5);
-  hoodGeo.toNonIndexed();
-  const hoodMat = createMaterial(PALETTES[currentPalette].hood, 'hood');
-  const hood = new THREE.Mesh(hoodGeo, hoodMat);
-  hood.position.set(0, HEAD_SIZE * 0.85, -0.02);
-  hood.rotation.x = -0.2;
-  head.add(hood);
-
-  // Hood brim
-  const brimGeo = new THREE.BoxGeometry(HEAD_SIZE * 1.1, 0.04, HEAD_SIZE * 0.6);
-  brimGeo.toNonIndexed();
-  const brim = new THREE.Mesh(brimGeo, hoodMat);
-  brim.position.set(0, HEAD_SIZE * 0.55, HEAD_SIZE * 0.15);
-  head.add(brim);
+  // Hood - connected garment (skirt + point)
+  // Use double-sided material so hood is visible from all angles (inside and outside)
+  const hoodMat = new THREE.MeshLambertMaterial({
+    color: PALETTES[currentPalette].hood,
+    flatShading: true,
+    side: THREE.DoubleSide,
+  });
+  materials['hood'] = hoodMat as THREE.MeshLambertMaterial;
+  if (ps1Enabled) {
+    patchPS1Shader(hoodMat, 2.0);
+  }
+  
+  // Hood skirt - open frustum from brow line to shoulders
+  const browLineY = 0.08; // Just above eyes
+  const shoulderY = -0.15; // Shoulder level
+  const skirtHeight = browLineY - shoulderY;
+  const skirtGeo = new THREE.CylinderGeometry(
+    HEAD_SIZE * 0.55,  // radiusTop (at brow)
+    HEAD_SIZE * 0.7,   // radiusBottom (at shoulders)
+    skirtHeight,
+    6,                 // radialSegments
+    1,                 // heightSegments
+    true               // openEnded
+  );
+  skirtGeo.toNonIndexed();
+  const skirt = new THREE.Mesh(skirtGeo, hoodMat);
+  skirt.position.set(0, (browLineY + shoulderY) / 2, -0.08); // Behind face so face is visible
+  head.add(skirt);
+  
+  // Hood point - cone whose base equals skirt top
+  const pointHeight = HEAD_SIZE * 1.0;
+  const pointGeo = new THREE.ConeGeometry(HEAD_SIZE * 0.55, pointHeight, 6);
+  pointGeo.toNonIndexed();
+  const point = new THREE.Mesh(pointGeo, hoodMat);
+  point.position.set(0, browLineY + pointHeight / 2, -0.08); // Base at skirt top
+  point.rotation.x = -0.15; // Slight lean back
+  head.add(point);
 
   // Hair peeking out (small boxes at sides)
   const hairGeo = new THREE.BoxGeometry(0.05, 0.12, 0.08);
@@ -429,13 +463,18 @@ function createArm(isLeft: boolean): THREE.Group {
   forearm.position.y = -ARM_LENGTH * 0.22;
   elbowGroup.add(forearm);
 
-  // Hand
+  // Hand - as a Group so bow can be parented to it
+  const handGroup = new THREE.Group();
+  handGroup.name = `hand${side}`;
+  handGroup.position.y = -ARM_LENGTH * 0.48;
+  
   const handGeo = new THREE.BoxGeometry(0.06, 0.06, 0.05);
   handGeo.toNonIndexed();
   const handMat = createMaterial(PALETTES[currentPalette].skin, 'skin');
   const hand = new THREE.Mesh(handGeo, handMat);
-  hand.position.y = -ARM_LENGTH * 0.48;
-  elbowGroup.add(hand);
+  handGroup.add(hand);
+  
+  elbowGroup.add(handGroup);
 
   // Glove/bracer
   const bracerGeo = new THREE.BoxGeometry(0.075, 0.08, 0.075);
@@ -531,17 +570,17 @@ function createBow(): THREE.Group {
   stringBottom.rotation.z = -0.08;
   bowGroup.add(stringBottom);
 
-  // Grip wrapping
+  // Grip wrapping - positioned at the center of the bow
   const gripGeo = new THREE.BoxGeometry(0.03, 0.08, 0.03);
   const gripMat = createMaterial(PALETTES[currentPalette].belt, 'belt');
   const grip = new THREE.Mesh(gripGeo, gripMat);
   grip.position.set(0.1, 0, 0);
   bowGroup.add(grip);
 
-  // Position bow at hand location (will be parented to elbow group)
-  // Hand is at y = -ARM_LENGTH * 0.48 relative to elbow
-  bowGroup.position.set(0, -ARM_LENGTH * 0.48, 0);
-  bowGroup.rotation.z = 0;
+  // Bow is now parented to handLeft group, so position is relative to hand
+  // Bow should be vertical with grip at hand center
+  bowGroup.position.set(0, 0, 0);
+  bowGroup.rotation.set(0, 0, 0);
 
   return bowGroup;
 }
@@ -733,10 +772,10 @@ function buildArcher(): THREE.Group {
   torso.add(legRight);
   torso.add(quiver);
 
-  // Parent bow to left elbow group (hand pivot) so it follows arm poses
-  const elbowLeft = armLeft.getObjectByName('elbowLeft') as THREE.Group;
-  if (elbowLeft) {
-    elbowLeft.add(bow);
+  // Parent bow to left hand group so it follows arm poses
+  const handLeft = armLeft.getObjectByName('handLeft') as THREE.Group;
+  if (handLeft) {
+    handLeft.add(bow);
   }
 
   archerGroup.add(torso);
@@ -819,6 +858,14 @@ function updatePose(delta: number): void {
       knee.rotation.z += (poseKnee.z - knee.rotation.z) * lerpSpeed;
     }
   });
+
+  // Bow rotation (parented to handLeft)
+  const bow = archerGroup.getObjectByName('bowHand') as THREE.Group;
+  if (bow && pose.bow) {
+    bow.rotation.x += (pose.bow.x - bow.rotation.x) * lerpSpeed;
+    bow.rotation.y += (pose.bow.y - bow.rotation.y) * lerpSpeed;
+    bow.rotation.z += (pose.bow.z - bow.rotation.z) * lerpSpeed;
+  }
 }
 
 // ============================================================
