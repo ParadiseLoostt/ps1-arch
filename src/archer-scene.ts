@@ -106,9 +106,9 @@ const POSE_FPS_INTERVAL = 1 / 12;
 const POSES: Record<string, Record<string, { x: number; y: number; z: number }>> = {
   Idle: {
     head: { x: 0, y: 0, z: 0 },
-    // Left arm (bow arm): relaxed at side, slightly forward
-    armLeft: { x: -0.3, y: 0.1, z: 0.15 },
-    elbowLeft: { x: -0.1, y: 0, z: 0 },
+    // Left arm (bow arm): ~15 degrees forward, elbow bent ~70 degrees
+    armLeft: { x: -0.26, y: 0.05, z: 0.1 },
+    elbowLeft: { x: -1.22, y: 0, z: 0 },
     // Right arm: relaxed at side
     armRight: { x: 0, y: 0, z: -0.15 },
     elbowRight: { x: -0.2, y: 0, z: 0 },
@@ -116,38 +116,38 @@ const POSES: Record<string, Record<string, { x: number; y: number; z: number }>>
     legRight: { x: 0, y: 0, z: 0 },
     kneeLeft: { x: 0, y: 0, z: 0 },
     kneeRight: { x: 0, y: 0, z: 0 },
-    // Bow rotation in hand
-    bow: { x: 0, y: 0, z: 0 },
+    // Bow: diagonal ~45 degrees across body
+    bow: { x: 0, y: 0, z: 0.785 },
   },
   Aim: {
     head: { x: 0, y: -0.3, z: 0 },
-    // Left arm: raised forward, holding bow in front of chest
-    armLeft: { x: -1.2, y: 0.2, z: 0.3 },
-    elbowLeft: { x: -0.3, y: 0, z: 0 },
-    // Right arm: brought forward to bow, hand at nock point
-    armRight: { x: -1.0, y: -0.3, z: -0.4 },
-    elbowRight: { x: -0.9, y: 0, z: 0 },
+    // Left arm: extended forward at shoulder height
+    armLeft: { x: -1.57, y: 0.1, z: 0.2 },
+    elbowLeft: { x: -0.1, y: 0, z: 0 },
+    // Right arm: brought across to nock point, elbow slightly below hand
+    armRight: { x: -1.4, y: -0.4, z: -0.5 },
+    elbowRight: { x: -0.6, y: 0, z: 0 },
     legLeft: { x: -0.15, y: 0, z: 0.05 },
     legRight: { x: 0.15, y: 0, z: -0.05 },
     kneeLeft: { x: 0.1, y: 0, z: 0 },
     kneeRight: { x: 0, y: 0, z: 0 },
-    // Bow: vertical, string facing away from body
-    bow: { x: 0, y: Math.PI, z: 0 },
+    // Bow: vertical, string facing +Z (away from body)
+    bow: { x: 0, y: 0, z: 0 },
   },
   Draw: {
     head: { x: 0, y: -0.4, z: 0 },
     // Left arm: fully extended forward
-    armLeft: { x: -1.5, y: 0.1, z: 0.4 },
-    elbowLeft: { x: -0.1, y: 0, z: 0 },
-    // Right arm: pulled back to cheek, drawing string
-    armRight: { x: -0.8, y: -0.5, z: -0.7 },
-    elbowRight: { x: -1.3, y: 0, z: 0 },
+    armLeft: { x: -1.57, y: 0.05, z: 0.3 },
+    elbowLeft: { x: 0, y: 0, z: 0 },
+    // Right arm: pulled back to right cheek corner
+    armRight: { x: -1.3, y: -0.6, z: -0.8 },
+    elbowRight: { x: -1.1, y: 0, z: 0 },
     legLeft: { x: -0.2, y: 0, z: 0.1 },
     legRight: { x: 0.2, y: 0, z: -0.1 },
     kneeLeft: { x: 0.15, y: 0, z: 0 },
     kneeRight: { x: 0.05, y: 0, z: 0 },
     // Bow: vertical, string stretched
-    bow: { x: 0, y: Math.PI, z: 0 },
+    bow: { x: 0, y: 0, z: 0 },
   },
 };
 
@@ -316,8 +316,7 @@ function createHead(): THREE.Group {
   mouth.position.set(0, -0.06, HEAD_SIZE * 0.46);
   head.add(mouth);
 
-  // Hood - connected garment (skirt + point)
-  // Use double-sided material so hood is visible from all angles (inside and outside)
+  // Hood - ONE garment enveloping the whole head
   const hoodMat = new THREE.MeshLambertMaterial({
     color: PALETTES[currentPalette].hood,
     flatShading: true,
@@ -328,31 +327,54 @@ function createHead(): THREE.Group {
     patchPS1Shader(hoodMat, 2.0);
   }
   
-  // Hood skirt - open frustum from brow line to shoulders
-  const browLineY = 0.08; // Just above eyes
-  const shoulderY = -0.15; // Shoulder level
-  const skirtHeight = browLineY - shoulderY;
-  const skirtGeo = new THREE.CylinderGeometry(
-    HEAD_SIZE * 0.55,  // radiusTop (at brow)
-    HEAD_SIZE * 0.7,   // radiusBottom (at shoulders)
-    skirtHeight,
-    6,                 // radialSegments
-    1,                 // heightSegments
-    true               // openEnded
-  );
-  skirtGeo.toNonIndexed();
-  const skirt = new THREE.Mesh(skirtGeo, hoodMat);
-  skirt.position.set(0, (browLineY + shoulderY) / 2, -0.08); // Behind face so face is visible
-  head.add(skirt);
+  // Hood group to contain all hood parts
+  const hoodGroup = new THREE.Group();
+  hoodGroup.name = 'hood';
   
-  // Hood point - cone whose base equals skirt top
-  const pointHeight = HEAD_SIZE * 1.0;
-  const pointGeo = new THREE.ConeGeometry(HEAD_SIZE * 0.55, pointHeight, 6);
-  pointGeo.toNonIndexed();
-  const point = new THREE.Mesh(pointGeo, hoodMat);
-  point.position.set(0, browLineY + pointHeight / 2, -0.08); // Base at skirt top
-  point.rotation.x = -0.15; // Slight lean back
-  head.add(point);
+  // Skull wrap: CylinderGeometry with opening at front (+Z)
+  // thetaStart=0.95, thetaLength=2*PI-1.9 creates ~110 degree missing sector at front
+  const skullWrapGeo = new THREE.CylinderGeometry(
+    0.13,  // radiusTop (at crown)
+    0.19,  // radiusBottom (at brow)
+    0.26,  // height
+    6,     // radialSegments
+    1,     // heightSegments
+    true,  // openEnded
+    0.95,  // thetaStart - starts at side
+    Math.PI * 2 - 1.9  // thetaLength - leaves 1.9 radian gap at front
+  );
+  skullWrapGeo.toNonIndexed();
+  const skullWrap = new THREE.Mesh(skullWrapGeo, hoodMat);
+  // Position so bottom rim is at brow line (y=0.08)
+  skullWrap.position.set(0, 0.08 + 0.13, 0); // Center is at brow + half height
+  hoodGroup.add(skullWrap);
+  
+  // Hood point: ConeGeometry seated on skull-wrap top rim
+  const hoodPointGeo = new THREE.ConeGeometry(0.13, 0.30, 6);
+  hoodPointGeo.toNonIndexed();
+  const hoodPoint = new THREE.Mesh(hoodPointGeo, hoodMat);
+  // Base at skull-wrap top rim (y = 0.08 + 0.26 = 0.34)
+  hoodPoint.position.set(0, 0.34 + 0.15, 0); // Center is at top + half height
+  hoodPoint.rotation.x = -0.21; // Tilted ~12 degrees backward
+  hoodGroup.add(hoodPoint);
+  
+  // Collar skirt: Full ring from brow line to shoulders
+  const collarSkirtGeo = new THREE.CylinderGeometry(
+    0.19,  // radiusTop (at brow)
+    0.26,  // radiusBottom (at shoulders)
+    0.12,  // height
+    6,     // radialSegments
+    1,     // heightSegments
+    true   // openEnded
+  );
+  collarSkirtGeo.toNonIndexed();
+  const collarSkirt = new THREE.Mesh(collarSkirtGeo, hoodMat);
+  // Position so top overlaps skull-wrap bottom by >= 0.02
+  // Top at y=0.08, bottom at y=-0.04
+  collarSkirt.position.set(0, 0.08 - 0.06, 0); // Center is at brow - half height
+  hoodGroup.add(collarSkirt);
+  
+  head.add(hoodGroup);
 
   // Hair peeking out (small boxes at sides)
   const hairGeo = new THREE.BoxGeometry(0.05, 0.12, 0.08);
@@ -791,6 +813,8 @@ function buildArcher(): THREE.Group {
 // ============================================================
 function setPose(name: string): void {
   currentPose = name;
+  // Run self-checks after pose change
+  setTimeout(() => runSelfChecks(), 100); // Small delay to allow pose to settle
 }
 
 function updatePose(delta: number): void {
@@ -1039,6 +1063,9 @@ export function initScene(container: HTMLElement): void {
   buildArcher();
   scene.add(archerGroup);
 
+  // Run initial self-checks
+  setTimeout(() => runSelfChecks(), 200);
+
   // Start animation
   animate();
 
@@ -1085,6 +1112,128 @@ function updateTriangleCounter(): void {
     const triangles = renderer.info.render.triangles;
     counter.textContent = `Triangles: ${triangles}`;
   }
+}
+
+// ============================================================
+// RUNTIME SELF-CHECKS
+// ============================================================
+function runSelfChecks(): void {
+  console.log('=== Runtime Self-Checks ===');
+  
+  const torso = archerGroup.getObjectByName('torso') as THREE.Group;
+  if (!torso) {
+    console.log('1. GRIP: FAIL - torso not found');
+    return;
+  }
+  
+  // Get world positions
+  const handLeft = torso.getObjectByName('handLeft') as THREE.Group;
+  const bowGroup = archerGroup.getObjectByName('bowHand') as THREE.Group;
+  const handRight = torso.getObjectByName('handRight') as THREE.Group;
+  const head = torso.getObjectByName('head') as THREE.Group;
+  const hoodGroup = head?.getObjectByName('hood') as THREE.Group;
+  
+  // Check 1: GRIP - bow grip anchor to handLeft palm center
+  if (handLeft && bowGroup) {
+    const handWorldPos = new THREE.Vector3();
+    handLeft.getWorldPosition(handWorldPos);
+    
+    // Bow grip is at the center of the bow group (where the grip mesh is)
+    const gripMesh = bowGroup.children.find(c => c.name === 'grip') as THREE.Mesh;
+    const gripWorldPos = new THREE.Vector3();
+    if (gripMesh) {
+      gripMesh.getWorldPosition(gripWorldPos);
+    } else {
+      bowGroup.getWorldPosition(gripWorldPos);
+    }
+    
+    const gripDistance = handWorldPos.distanceTo(gripWorldPos);
+    const gripPass = gripDistance < 0.02;
+    console.log(`1. GRIP: ${gripPass ? 'PASS' : 'FAIL'} - distance: ${gripDistance.toFixed(4)} (must be < 0.02)`);
+  } else {
+    console.log('1. GRIP: FAIL - handLeft or bowGroup not found');
+  }
+  
+  // Check 2: HANDS - right hand to bowstring nock in AIM and DRAW
+  if (currentPose === 'Aim' || currentPose === 'Draw') {
+    if (handRight && bowGroup) {
+      const handWorldPos = new THREE.Vector3();
+      handRight.getWorldPosition(handWorldPos);
+      
+      // Bowstring nock is where the two string segments meet (at the center, slightly offset)
+      // Approximate as the center of the bow group
+      const nockWorldPos = new THREE.Vector3();
+      bowGroup.getWorldPosition(nockWorldPos);
+      
+      const handsDistance = handWorldPos.distanceTo(nockWorldPos);
+      const handsPass = handsDistance < 0.03;
+      console.log(`2. HANDS: ${handsPass ? 'PASS' : 'FAIL'} - distance: ${handsDistance.toFixed(4)} (must be < 0.03)`);
+    } else {
+      console.log('2. HANDS: FAIL - handRight or bowGroup not found');
+    }
+  } else {
+    console.log('2. HANDS: SKIP - not in AIM or DRAW pose');
+  }
+  
+  // Check 3: HOOD - hood box vs head box
+  if (hoodGroup && head) {
+    const hoodBox = new THREE.Box3().setFromObject(hoodGroup);
+    const headBox = new THREE.Box3().setFromObject(head);
+    
+    // hood.min.y <= head.min.y + 0.02 (skirt reaches below the skull)
+    const hoodMinY = hoodBox.min.y;
+    const headMinY = headBox.min.y;
+    const hoodMinPass = hoodMinY <= headMinY + 0.02;
+    
+    // hood.max.y >= head.max.y + 0.15 (point above crown)
+    const hoodMaxY = hoodBox.max.y;
+    const headMaxY = headBox.max.y;
+    const hoodMaxPass = hoodMaxY >= headMaxY + 0.15;
+    
+    // hood box center x/z within 0.01 of head center x/z
+    const hoodCenter = new THREE.Vector3();
+    hoodBox.getCenter(hoodCenter);
+    const headCenter = new THREE.Vector3();
+    headBox.getCenter(headCenter);
+    const hoodCenterXPass = Math.abs(hoodCenter.x - headCenter.x) < 0.01;
+    const hoodCenterZPass = Math.abs(hoodCenter.z - headCenter.z) < 0.01;
+    
+    const hoodPass = hoodMinPass && hoodMaxPass && hoodCenterXPass && hoodCenterZPass;
+    console.log(`3. HOOD: ${hoodPass ? 'PASS' : 'FAIL'}`);
+    console.log(`   - minY: ${hoodMinPass ? 'PASS' : 'FAIL'} - hood: ${hoodMinY.toFixed(4)}, head: ${headMinY.toFixed(4)}`);
+    console.log(`   - maxY: ${hoodMaxPass ? 'PASS' : 'FAIL'} - hood: ${hoodMaxY.toFixed(4)}, head: ${headMaxY.toFixed(4)}`);
+    console.log(`   - centerX: ${hoodCenterXPass ? 'PASS' : 'FAIL'} - hood: ${hoodCenter.x.toFixed(4)}, head: ${headCenter.x.toFixed(4)}`);
+    console.log(`   - centerZ: ${hoodCenterZPass ? 'PASS' : 'FAIL'} - hood: ${hoodCenter.z.toFixed(4)}, head: ${headCenter.z.toFixed(4)}`);
+  } else {
+    console.log('3. HOOD: FAIL - hoodGroup or head not found');
+  }
+  
+  // Check 4: FACE - eyes z > hood front rim z at eye height
+  if (head && hoodGroup) {
+    const eyeLeft = head.children.find(c => c instanceof THREE.Mesh && c.position.y === 0.03 && c.position.x < 0) as THREE.Mesh;
+    if (eyeLeft) {
+      const eyeWorldPos = new THREE.Vector3();
+      eyeLeft.getWorldPosition(eyeWorldPos);
+      
+      // Get hood front rim z at eye height
+      // The hood front rim is at the opening of the skull wrap
+      // Approximate as the hood group center z + some offset
+      const hoodWorldPos = new THREE.Vector3();
+      hoodGroup.getWorldPosition(hoodWorldPos);
+      
+      // The front rim should be behind the eyes (less z)
+      const hoodFrontRimZ = hoodWorldPos.z + 0.13; // Approximate front rim position
+      
+      const facePass = eyeWorldPos.z > hoodFrontRimZ;
+      console.log(`4. FACE: ${facePass ? 'PASS' : 'FAIL'} - eye z: ${eyeWorldPos.z.toFixed(4)}, hood front rim z: ${hoodFrontRimZ.toFixed(4)}`);
+    } else {
+      console.log('4. FACE: FAIL - eyeLeft not found');
+    }
+  } else {
+    console.log('4. FACE: FAIL - head or hoodGroup not found');
+  }
+  
+  console.log('=== End Self-Checks ===');
 }
 
 // ============================================================
