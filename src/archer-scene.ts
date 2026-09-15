@@ -106,9 +106,9 @@ const POSE_FPS_INTERVAL = 1 / 12;
 const POSES: Record<string, Record<string, { x: number; y: number; z: number }>> = {
   Idle: {
     head: { x: 0, y: 0, z: 0 },
-    // Left arm (bow arm): ~15 degrees forward, elbow bent ~70 degrees
-    armLeft: { x: -0.26, y: 0.05, z: 0.1 },
-    elbowLeft: { x: -1.22, y: 0, z: 0 },
+    // Left arm (bow arm): relaxed at hip height, slightly forward
+    armLeft: { x: -0.15, y: 0.1, z: 0.15 },
+    elbowLeft: { x: -0.3, y: 0, z: 0 },
     // Right arm: relaxed at side
     armRight: { x: 0, y: 0, z: -0.15 },
     elbowRight: { x: -0.2, y: 0, z: 0 },
@@ -116,32 +116,32 @@ const POSES: Record<string, Record<string, { x: number; y: number; z: number }>>
     legRight: { x: 0, y: 0, z: 0 },
     kneeLeft: { x: 0, y: 0, z: 0 },
     kneeRight: { x: 0, y: 0, z: 0 },
-    // Bow: diagonal ~45 degrees across body
-    bow: { x: 0, y: 0, z: 0.785 },
+    // Bow: diagonal ~45 degrees across front (matches createBow default)
+    bow: { x: 0, y: 0, z: Math.PI / 4 },
   },
   Aim: {
     head: { x: 0, y: -0.3, z: 0 },
-    // Left arm: extended forward at shoulder height
-    armLeft: { x: -1.57, y: 0.1, z: 0.2 },
-    elbowLeft: { x: -0.1, y: 0, z: 0 },
+    // Left arm: extended forward at shoulder height, holding bow
+    armLeft: { x: -1.57, y: 0.0, z: 0.1 },
+    elbowLeft: { x: 0, y: 0, z: 0 },
     // Right arm: brought across to nock point, elbow slightly below hand
-    armRight: { x: -1.4, y: -0.4, z: -0.5 },
-    elbowRight: { x: -0.6, y: 0, z: 0 },
+    armRight: { x: -1.4, y: -0.3, z: -0.4 },
+    elbowRight: { x: -0.7, y: 0, z: 0 },
     legLeft: { x: -0.15, y: 0, z: 0.05 },
     legRight: { x: 0.15, y: 0, z: -0.05 },
     kneeLeft: { x: 0.1, y: 0, z: 0 },
     kneeRight: { x: 0, y: 0, z: 0 },
-    // Bow: vertical, string facing +Z (away from body)
+    // Bow: vertical (cancel default diagonal)
     bow: { x: 0, y: 0, z: 0 },
   },
   Draw: {
     head: { x: 0, y: -0.4, z: 0 },
     // Left arm: fully extended forward
-    armLeft: { x: -1.57, y: 0.05, z: 0.3 },
+    armLeft: { x: -1.57, y: 0.0, z: 0.1 },
     elbowLeft: { x: 0, y: 0, z: 0 },
     // Right arm: pulled back to right cheek corner
-    armRight: { x: -1.3, y: -0.6, z: -0.8 },
-    elbowRight: { x: -1.1, y: 0, z: 0 },
+    armRight: { x: -1.2, y: -0.5, z: -0.7 },
+    elbowRight: { x: -1.2, y: 0, z: 0 },
     legLeft: { x: -0.2, y: 0, z: 0.1 },
     legRight: { x: 0.2, y: 0, z: -0.1 },
     kneeLeft: { x: 0.15, y: 0, z: 0 },
@@ -316,7 +316,11 @@ function createHead(): THREE.Group {
   mouth.position.set(0, -0.06, HEAD_SIZE * 0.46);
   head.add(mouth);
 
-  // Hood - ONE garment enveloping the whole head
+  // Hood - minimal pointed cap + back flap (NEW)
+  const HEAD_W = HEAD_SIZE;
+  const HEAD_H = HEAD_SIZE * 1.1;
+  const HEAD_D = HEAD_SIZE * 0.9;
+  
   const hoodMat = new THREE.MeshLambertMaterial({
     color: PALETTES[currentPalette].hood,
     flatShading: true,
@@ -327,52 +331,36 @@ function createHead(): THREE.Group {
     patchPS1Shader(hoodMat, 2.0);
   }
   
-  // Hood group to contain all hood parts
+  // Hood group
   const hoodGroup = new THREE.Group();
   hoodGroup.name = 'hood';
   
-  // Skull wrap: CylinderGeometry with opening at front (+Z)
-  // thetaStart=0.95, thetaLength=2*PI-1.9 creates ~110 degree missing sector at front
-  const skullWrapGeo = new THREE.CylinderGeometry(
-    0.13,  // radiusTop (at crown)
-    0.19,  // radiusBottom (at brow)
-    0.26,  // height
-    6,     // radialSegments
-    1,     // heightSegments
-    true,  // openEnded
-    0.95,  // thetaStart - starts at side
-    Math.PI * 2 - 1.9  // thetaLength - leaves 1.9 radian gap at front
-  );
-  skullWrapGeo.toNonIndexed();
-  const skullWrap = new THREE.Mesh(skullWrapGeo, hoodMat);
-  // Position so bottom rim is at brow line (y=0.08)
-  skullWrap.position.set(0, 0.08 + 0.13, 0); // Center is at brow + half height
-  hoodGroup.add(skullWrap);
+  // Brow plane: local Y = head center + HEAD_H * 0.10
+  const browPlaneY = HEAD_H * 0.10;
   
-  // Hood point: ConeGeometry seated on skull-wrap top rim
-  const hoodPointGeo = new THREE.ConeGeometry(0.13, 0.30, 6);
-  hoodPointGeo.toNonIndexed();
-  const hoodPoint = new THREE.Mesh(hoodPointGeo, hoodMat);
-  // Base at skull-wrap top rim (y = 0.08 + 0.26 = 0.34)
-  hoodPoint.position.set(0, 0.34 + 0.15, 0); // Center is at top + half height
-  hoodPoint.rotation.x = -0.21; // Tilted ~12 degrees backward
-  hoodGroup.add(hoodPoint);
+  // Cap: ConeGeometry with base at brow plane, sunk 0.03 into head
+  const capRadius = HEAD_W * 0.78;
+  const capHeight = HEAD_H * 1.1;
+  const capGeo = new THREE.ConeGeometry(capRadius, capHeight, 6);
+  capGeo.toNonIndexed();
+  const cap = new THREE.Mesh(capGeo, hoodMat);
+  cap.name = 'hoodCap';
+  // Base at brow plane, sunk 0.03 into head (so center is at brow + height/2 - 0.03)
+  cap.position.set(0, browPlaneY + capHeight / 2 - 0.03, 0);
+  hoodGroup.add(cap);
   
-  // Collar skirt: Full ring from brow line to shoulders
-  const collarSkirtGeo = new THREE.CylinderGeometry(
-    0.19,  // radiusTop (at brow)
-    0.26,  // radiusBottom (at shoulders)
-    0.12,  // height
-    6,     // radialSegments
-    1,     // heightSegments
-    true   // openEnded
-  );
-  collarSkirtGeo.toNonIndexed();
-  const collarSkirt = new THREE.Mesh(collarSkirtGeo, hoodMat);
-  // Position so top overlaps skull-wrap bottom by >= 0.02
-  // Top at y=0.08, bottom at y=-0.04
-  collarSkirt.position.set(0, 0.08 - 0.06, 0); // Center is at brow - half height
-  hoodGroup.add(collarSkirt);
+  // Back flap: BoxGeometry covering back of skull from brow to neck
+  const flapWidth = HEAD_W * 1.05;
+  const flapHeight = HEAD_H * 0.8;
+  const flapDepth = 0.03;
+  const flapGeo = new THREE.BoxGeometry(flapWidth, flapHeight, flapDepth);
+  flapGeo.toNonIndexed();
+  const flap = new THREE.Mesh(flapGeo, hoodMat);
+  flap.name = 'hoodFlap';
+  // Placed against back face of head (z = -HEAD_D/2 - 0.015)
+  // From brow plane down to neck (center at brow - flapHeight/2)
+  flap.position.set(0, browPlaneY - flapHeight / 2, -HEAD_D / 2 - 0.015);
+  hoodGroup.add(flap);
   
   head.add(hoodGroup);
 
@@ -558,51 +546,71 @@ function createLeg(isLeft: boolean): THREE.Group {
 }
 
 function createBow(): THREE.Group {
+  // NEW bow: origin (0,0,0) is EXACTLY the center of the wooden riser
   const bowGroup = new THREE.Group();
   bowGroup.name = 'bowHand';
 
-  // Recurve bow shape using TubeGeometry
-  const curve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0, -BOW_HEIGHT * 0.5, 0),
-    new THREE.Vector3(0.08, -BOW_HEIGHT * 0.3, 0),
-    new THREE.Vector3(0.12, -BOW_HEIGHT * 0.1, 0),
-    new THREE.Vector3(0.1, BOW_HEIGHT * 0.1, 0),
-    new THREE.Vector3(0.05, BOW_HEIGHT * 0.3, 0),
-    new THREE.Vector3(0, BOW_HEIGHT * 0.5, 0),
+  const STRING_OFFSET = 0.025; // String offset in -Z from wood plane
+
+  // Wooden riser wrap - small box AT the origin
+  const riserGeo = new THREE.BoxGeometry(0.03, 0.10, 0.03);
+  riserGeo.toNonIndexed();
+  const riserMat = createMaterial(PALETTES[currentPalette].bow, 'bow');
+  const riser = new THREE.Mesh(riserGeo, riserMat);
+  riser.name = 'bowRiser';
+  riser.position.set(0, 0, 0); // Exactly at origin
+  bowGroup.add(riser);
+
+  // Bow limbs - TubeGeometry symmetric around origin in local Y
+  const limbCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.00, -BOW_HEIGHT * 0.5, 0),
+    new THREE.Vector3(0.07, -BOW_HEIGHT * 0.3, 0),
+    new THREE.Vector3(0.10, -BOW_HEIGHT * 0.1, 0),
+    new THREE.Vector3(0.08, 0.0, 0),          // Center at origin
+    new THREE.Vector3(0.10, BOW_HEIGHT * 0.1, 0),
+    new THREE.Vector3(0.07, BOW_HEIGHT * 0.3, 0),
+    new THREE.Vector3(0.00, BOW_HEIGHT * 0.5, 0),
   ]);
 
-  const bowGeo = new THREE.TubeGeometry(curve, 4, 0.015, 4, false);
-  bowGeo.toNonIndexed();
-  const bowMat = createMaterial(PALETTES[currentPalette].bow, 'bow');
-  const bow = new THREE.Mesh(bowGeo, bowMat);
-  bowGroup.add(bow);
+  const limbGeo = new THREE.TubeGeometry(limbCurve, 6, 0.012, 4, false);
+  limbGeo.toNonIndexed();
+  const limbMat = createMaterial(PALETTES[currentPalette].bow, 'bow');
+  const limbs = new THREE.Mesh(limbGeo, limbMat);
+  limbs.name = 'bowLimbs';
+  bowGroup.add(limbs);
 
-  // Bowstring - two thin cylinders meeting at nock point
-  const stringMat = new THREE.MeshLambertMaterial({ color: 0xcccccc, flatShading: true });
+  // Bowstring - separate child mesh offset in local -Z from wood plane
+  const stringMat = new THREE.MeshLambertMaterial({
+    color: 0xcccccc,
+    flatShading: true,
+  });
 
-  const stringTopGeo = new THREE.CylinderGeometry(0.003, 0.003, BOW_HEIGHT * 0.5, 3);
-  const stringTop = new THREE.Mesh(stringTopGeo, stringMat);
-  stringTop.position.set(-0.02, BOW_HEIGHT * 0.25, 0);
-  stringTop.rotation.z = 0.08;
-  bowGroup.add(stringTop);
+  // Single string cylinder running vertically at -Z offset
+  const stringGeo = new THREE.CylinderGeometry(0.003, 0.003, BOW_HEIGHT * 0.95, 3);
+  stringGeo.toNonIndexed();
+  const stringMesh = new THREE.Mesh(stringGeo, stringMat);
+  stringMesh.name = 'bowString';
+  // Offset in -Z from wood plane (wood at z=0, string at z=-STRING_OFFSET)
+  stringMesh.position.set(0, 0, -STRING_OFFSET);
+  bowGroup.add(stringMesh);
 
-  const stringBottomGeo = new THREE.CylinderGeometry(0.003, 0.003, BOW_HEIGHT * 0.5, 3);
-  const stringBottom = new THREE.Mesh(stringBottomGeo, stringMat);
-  stringBottom.position.set(-0.02, -BOW_HEIGHT * 0.25, 0);
-  stringBottom.rotation.z = -0.08;
-  bowGroup.add(stringBottom);
+  // Arrow (visible in DRAW pose, hidden otherwise)
+  const arrowGeo = new THREE.CylinderGeometry(0.005, 0.005, 0.4, 4);
+  arrowGeo.toNonIndexed();
+  const arrowMat = new THREE.MeshLambertMaterial({
+    color: PALETTES[currentPalette].arrow,
+    flatShading: true,
+  });
+  const arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
+  arrowMesh.name = 'bowArrow';
+  // Arrow lies along bow, pointing forward (+Z), at string level
+  arrowMesh.rotation.x = Math.PI / 2;
+  arrowMesh.position.set(0, 0, -STRING_OFFSET);
+  arrowMesh.visible = false;
+  bowGroup.add(arrowMesh);
 
-  // Grip wrapping - positioned at the center of the bow
-  const gripGeo = new THREE.BoxGeometry(0.03, 0.08, 0.03);
-  const gripMat = createMaterial(PALETTES[currentPalette].belt, 'belt');
-  const grip = new THREE.Mesh(gripGeo, gripMat);
-  grip.position.set(0.1, 0, 0);
-  bowGroup.add(grip);
-
-  // Bow is now parented to handLeft group, so position is relative to hand
-  // Bow should be vertical with grip at hand center
-  bowGroup.position.set(0, 0, 0);
-  bowGroup.rotation.set(0, 0, 0);
+  // Initial local pose: diagonal ~45 degrees across front
+  bowGroup.rotation.set(0, 0, Math.PI / 4);
 
   return bowGroup;
 }
@@ -890,6 +898,12 @@ function updatePose(delta: number): void {
     bow.rotation.y += (pose.bow.y - bow.rotation.y) * lerpSpeed;
     bow.rotation.z += (pose.bow.z - bow.rotation.z) * lerpSpeed;
   }
+  
+  // Arrow visibility - only visible in Draw pose
+  const arrow = bow?.getObjectByName('bowArrow') as THREE.Mesh;
+  if (arrow) {
+    arrow.visible = currentPose === 'Draw';
+  }
 }
 
 // ============================================================
@@ -1115,122 +1129,168 @@ function updateTriangleCounter(): void {
 }
 
 // ============================================================
-// RUNTIME SELF-CHECKS
+// RUNTIME SELF-CHECKS (NEW)
 // ============================================================
 function runSelfChecks(): void {
   console.log('=== Runtime Self-Checks ===');
   
   const torso = archerGroup.getObjectByName('torso') as THREE.Group;
   if (!torso) {
-    console.log('1. GRIP: FAIL - torso not found');
+    console.log('SETUP: FAIL - torso not found');
     return;
   }
   
-  // Get world positions
   const handLeft = torso.getObjectByName('handLeft') as THREE.Group;
-  const bowGroup = archerGroup.getObjectByName('bowHand') as THREE.Group;
   const handRight = torso.getObjectByName('handRight') as THREE.Group;
+  const bowGroup = archerGroup.getObjectByName('bowHand') as THREE.Group;
   const head = torso.getObjectByName('head') as THREE.Group;
   const hoodGroup = head?.getObjectByName('hood') as THREE.Group;
   
-  // Check 1: GRIP - bow grip anchor to handLeft palm center
+  // Find specific meshes
+  const hoodCap = hoodGroup?.getObjectByName('hoodCap') as THREE.Mesh;
+  const hoodFlap = hoodGroup?.getObjectByName('hoodFlap') as THREE.Mesh;
+  const bowRiser = bowGroup?.getObjectByName('bowRiser') as THREE.Mesh;
+  const bowString = bowGroup?.getObjectByName('bowString') as THREE.Mesh;
+  
+  // Find eyes and mouth
+  const eyeLeft = head?.children.find(c => c instanceof THREE.Mesh && c.position.y === 0.03 && c.position.x < 0) as THREE.Mesh;
+  const eyeRight = head?.children.find(c => c instanceof THREE.Mesh && c.position.y === 0.03 && c.position.x > 0) as THREE.Mesh;
+  const mouth = head?.children.find(c => c instanceof THREE.Mesh && c.position.y === -0.06) as THREE.Mesh;
+  
+  // Check 1: HOOD_SIT - cap base world Y inside [eyeWorldY, eyeWorldY + 0.06]
+  if (hoodCap && eyeLeft) {
+    const capWorldPos = new THREE.Vector3();
+    hoodCap.getWorldPosition(capWorldPos);
+    
+    const eyeWorldPos = new THREE.Vector3();
+    eyeLeft.getWorldPosition(eyeWorldPos);
+    
+    // Cap base Y = cap center Y - cap height / 2
+    // Cap height = HEAD_H * 1.1 = HEAD_SIZE * 1.1 * 1.1
+    const capHeight = HEAD_SIZE * 1.1 * 1.1;
+    const capBaseY = capWorldPos.y - capHeight / 2;
+    const eyeY = eyeWorldPos.y;
+    
+    const hoodSitPass = capBaseY >= eyeY && capBaseY <= eyeY + 0.06;
+    console.log(`1. HOOD_SIT: ${hoodSitPass ? 'PASS' : 'FAIL'} - cap base Y: ${capBaseY.toFixed(4)}, eye Y: ${eyeY.toFixed(4)}, range: [${eyeY.toFixed(4)}, ${(eyeY + 0.06).toFixed(4)}]`);
+  } else {
+    console.log('1. HOOD_SIT: FAIL - hoodCap or eyeLeft not found');
+  }
+  
+  // Check 2: HOOD_COVER - cap base world radius >= head half-diagonal * 1.05
+  if (hoodCap && head) {
+    const capRadius = HEAD_SIZE * 0.78;
+    const headHalfDiagonal = Math.sqrt(HEAD_SIZE * HEAD_SIZE + (HEAD_SIZE * 0.9) * (HEAD_SIZE * 0.9)) / 2;
+    const requiredRadius = headHalfDiagonal * 1.05;
+    
+    const hoodCoverPass = capRadius >= requiredRadius;
+    console.log(`2. HOOD_COVER: ${hoodCoverPass ? 'PASS' : 'FAIL'} - cap radius: ${capRadius.toFixed(4)}, required: ${requiredRadius.toFixed(4)}`);
+  } else {
+    console.log('2. HOOD_COVER: FAIL - hoodCap or head not found');
+  }
+  
+  // Check 3: HOOD_CENTER - cap world X/Z within 0.005 of head world X/Z
+  if (hoodCap && head) {
+    const capWorldPos = new THREE.Vector3();
+    hoodCap.getWorldPosition(capWorldPos);
+    
+    const headWorldPos = new THREE.Vector3();
+    head.getWorldPosition(headWorldPos);
+    
+    const capXPass = Math.abs(capWorldPos.x - headWorldPos.x) < 0.005;
+    const capZPass = Math.abs(capWorldPos.z - headWorldPos.z) < 0.005;
+    const hoodCenterPass = capXPass && capZPass;
+    
+    console.log(`3. HOOD_CENTER: ${hoodCenterPass ? 'PASS' : 'FAIL'}`);
+    console.log(`   - X: ${capXPass ? 'PASS' : 'FAIL'} - cap: ${capWorldPos.x.toFixed(4)}, head: ${headWorldPos.x.toFixed(4)}`);
+    console.log(`   - Z: ${capZPass ? 'PASS' : 'FAIL'} - cap: ${capWorldPos.z.toFixed(4)}, head: ${headWorldPos.z.toFixed(4)}`);
+  } else {
+    console.log('3. HOOD_CENTER: FAIL - hoodCap or head not found');
+  }
+  
+  // Check 4: FACE_OPEN - eyes and mouth world Y strictly below cap base world Y
+  if (hoodCap && eyeLeft && eyeRight && mouth) {
+    const capWorldPos = new THREE.Vector3();
+    hoodCap.getWorldPosition(capWorldPos);
+    const capHeight = HEAD_SIZE * 1.1 * 1.1;
+    const capBaseY = capWorldPos.y - capHeight / 2;
+    
+    const eyeLeftWorldPos = new THREE.Vector3();
+    eyeLeft.getWorldPosition(eyeLeftWorldPos);
+    const eyeRightWorldPos = new THREE.Vector3();
+    eyeRight.getWorldPosition(eyeRightWorldPos);
+    const mouthWorldPos = new THREE.Vector3();
+    mouth.getWorldPosition(mouthWorldPos);
+    
+    const eyesBelow = eyeLeftWorldPos.y < capBaseY && eyeRightWorldPos.y < capBaseY;
+    const mouthBelow = mouthWorldPos.y < capBaseY;
+    
+    // Check no hood mesh bounding box intersects face front box
+    const faceFrontBox = new THREE.Box3(
+      new THREE.Vector3(-HEAD_SIZE / 2, -HEAD_SIZE * 0.55, HEAD_SIZE * 0.45),
+      new THREE.Vector3(HEAD_SIZE / 2, HEAD_SIZE * 0.55, HEAD_SIZE * 0.55)
+    );
+    
+    let hoodIntersectsFace = false;
+    if (hoodCap) {
+      const capBox = new THREE.Box3().setFromObject(hoodCap);
+      hoodIntersectsFace = hoodIntersectsFace || capBox.intersectsBox(faceFrontBox);
+    }
+    if (hoodFlap) {
+      const flapBox = new THREE.Box3().setFromObject(hoodFlap);
+      hoodIntersectsFace = hoodIntersectsFace || flapBox.intersectsBox(faceFrontBox);
+    }
+    
+    const faceOpenPass = eyesBelow && mouthBelow && !hoodIntersectsFace;
+    console.log(`4. FACE_OPEN: ${faceOpenPass ? 'PASS' : 'FAIL'} - eyes below: ${eyesBelow}, mouth below: ${mouthBelow}, no intersection: ${!hoodIntersectsFace}`);
+  } else {
+    console.log('4. FACE_OPEN: FAIL - hoodCap, eyes, or mouth not found');
+  }
+  
+  // Check 5: GRIP_WOOD - world distance left palm center to bow group origin < 0.02
   if (handLeft && bowGroup) {
     const handWorldPos = new THREE.Vector3();
     handLeft.getWorldPosition(handWorldPos);
     
-    // Bow grip is at the center of the bow group (where the grip mesh is)
-    const gripMesh = bowGroup.children.find(c => c.name === 'grip') as THREE.Mesh;
-    const gripWorldPos = new THREE.Vector3();
-    if (gripMesh) {
-      gripMesh.getWorldPosition(gripWorldPos);
-    } else {
-      bowGroup.getWorldPosition(gripWorldPos);
-    }
+    const bowWorldPos = new THREE.Vector3();
+    bowGroup.getWorldPosition(bowWorldPos);
     
-    const gripDistance = handWorldPos.distanceTo(gripWorldPos);
-    const gripPass = gripDistance < 0.02;
-    console.log(`1. GRIP: ${gripPass ? 'PASS' : 'FAIL'} - distance: ${gripDistance.toFixed(4)} (must be < 0.02)`);
+    const gripDistance = handWorldPos.distanceTo(bowWorldPos);
+    const gripWoodPass = gripDistance < 0.02;
+    console.log(`5. GRIP_WOOD: ${gripWoodPass ? 'PASS' : 'FAIL'} - distance: ${gripDistance.toFixed(4)} (must be < 0.02)`);
   } else {
-    console.log('1. GRIP: FAIL - handLeft or bowGroup not found');
+    console.log('5. GRIP_WOOD: FAIL - handLeft or bowGroup not found');
   }
   
-  // Check 2: HANDS - right hand to bowstring nock in AIM and DRAW
-  if (currentPose === 'Aim' || currentPose === 'Draw') {
-    if (handRight && bowGroup) {
+  // Check 6: LEFT_HAND_STRING_CLEAR - world distance left palm center to bowstring mesh > 0.04 in IDLE and AIM
+  if (currentPose === 'Idle' || currentPose === 'Aim') {
+    if (handLeft && bowString) {
       const handWorldPos = new THREE.Vector3();
-      handRight.getWorldPosition(handWorldPos);
+      handLeft.getWorldPosition(handWorldPos);
       
-      // Bowstring nock is where the two string segments meet (at the center, slightly offset)
-      // Approximate as the center of the bow group
-      const nockWorldPos = new THREE.Vector3();
-      bowGroup.getWorldPosition(nockWorldPos);
+      const stringWorldPos = new THREE.Vector3();
+      bowString.getWorldPosition(stringWorldPos);
       
-      const handsDistance = handWorldPos.distanceTo(nockWorldPos);
-      const handsPass = handsDistance < 0.03;
-      console.log(`2. HANDS: ${handsPass ? 'PASS' : 'FAIL'} - distance: ${handsDistance.toFixed(4)} (must be < 0.03)`);
+      const stringDistance = handWorldPos.distanceTo(stringWorldPos);
+      const stringClearPass = stringDistance > 0.04;
+      console.log(`6. LEFT_HAND_STRING_CLEAR: ${stringClearPass ? 'PASS' : 'FAIL'} - distance: ${stringDistance.toFixed(4)} (must be > 0.04)`);
     } else {
-      console.log('2. HANDS: FAIL - handRight or bowGroup not found');
+      console.log('6. LEFT_HAND_STRING_CLEAR: FAIL - handLeft or bowString not found');
     }
   } else {
-    console.log('2. HANDS: SKIP - not in AIM or DRAW pose');
+    console.log('6. LEFT_HAND_STRING_CLEAR: SKIP - not in IDLE or AIM pose');
   }
   
-  // Check 3: HOOD - hood box vs head box
-  if (hoodGroup && head) {
-    const hoodBox = new THREE.Box3().setFromObject(hoodGroup);
-    const headBox = new THREE.Box3().setFromObject(head);
+  // Check 7: STRING_BEHIND_WOOD - in bow local space string z <= wood z - 0.02
+  if (bowRiser && bowString) {
+    // Both are children of bowGroup, so we can compare their local positions
+    const woodZ = bowRiser.position.z;
+    const stringZ = bowString.position.z;
     
-    // hood.min.y <= head.min.y + 0.02 (skirt reaches below the skull)
-    const hoodMinY = hoodBox.min.y;
-    const headMinY = headBox.min.y;
-    const hoodMinPass = hoodMinY <= headMinY + 0.02;
-    
-    // hood.max.y >= head.max.y + 0.15 (point above crown)
-    const hoodMaxY = hoodBox.max.y;
-    const headMaxY = headBox.max.y;
-    const hoodMaxPass = hoodMaxY >= headMaxY + 0.15;
-    
-    // hood box center x/z within 0.01 of head center x/z
-    const hoodCenter = new THREE.Vector3();
-    hoodBox.getCenter(hoodCenter);
-    const headCenter = new THREE.Vector3();
-    headBox.getCenter(headCenter);
-    const hoodCenterXPass = Math.abs(hoodCenter.x - headCenter.x) < 0.01;
-    const hoodCenterZPass = Math.abs(hoodCenter.z - headCenter.z) < 0.01;
-    
-    const hoodPass = hoodMinPass && hoodMaxPass && hoodCenterXPass && hoodCenterZPass;
-    console.log(`3. HOOD: ${hoodPass ? 'PASS' : 'FAIL'}`);
-    console.log(`   - minY: ${hoodMinPass ? 'PASS' : 'FAIL'} - hood: ${hoodMinY.toFixed(4)}, head: ${headMinY.toFixed(4)}`);
-    console.log(`   - maxY: ${hoodMaxPass ? 'PASS' : 'FAIL'} - hood: ${hoodMaxY.toFixed(4)}, head: ${headMaxY.toFixed(4)}`);
-    console.log(`   - centerX: ${hoodCenterXPass ? 'PASS' : 'FAIL'} - hood: ${hoodCenter.x.toFixed(4)}, head: ${headCenter.x.toFixed(4)}`);
-    console.log(`   - centerZ: ${hoodCenterZPass ? 'PASS' : 'FAIL'} - hood: ${hoodCenter.z.toFixed(4)}, head: ${headCenter.z.toFixed(4)}`);
+    const stringBehindPass = stringZ <= woodZ - 0.02;
+    console.log(`7. STRING_BEHIND_WOOD: ${stringBehindPass ? 'PASS' : 'FAIL'} - string z: ${stringZ.toFixed(4)}, wood z: ${woodZ.toFixed(4)}, required: <= ${(woodZ - 0.02).toFixed(4)}`);
   } else {
-    console.log('3. HOOD: FAIL - hoodGroup or head not found');
-  }
-  
-  // Check 4: FACE - eyes z > hood front rim z at eye height
-  if (head && hoodGroup) {
-    const eyeLeft = head.children.find(c => c instanceof THREE.Mesh && c.position.y === 0.03 && c.position.x < 0) as THREE.Mesh;
-    if (eyeLeft) {
-      const eyeWorldPos = new THREE.Vector3();
-      eyeLeft.getWorldPosition(eyeWorldPos);
-      
-      // Get hood front rim z at eye height
-      // The hood front rim is at the opening of the skull wrap
-      // Approximate as the hood group center z + some offset
-      const hoodWorldPos = new THREE.Vector3();
-      hoodGroup.getWorldPosition(hoodWorldPos);
-      
-      // The front rim should be behind the eyes (less z)
-      const hoodFrontRimZ = hoodWorldPos.z + 0.13; // Approximate front rim position
-      
-      const facePass = eyeWorldPos.z > hoodFrontRimZ;
-      console.log(`4. FACE: ${facePass ? 'PASS' : 'FAIL'} - eye z: ${eyeWorldPos.z.toFixed(4)}, hood front rim z: ${hoodFrontRimZ.toFixed(4)}`);
-    } else {
-      console.log('4. FACE: FAIL - eyeLeft not found');
-    }
-  } else {
-    console.log('4. FACE: FAIL - head or hoodGroup not found');
+    console.log('7. STRING_BEHIND_WOOD: FAIL - bowRiser or bowString not found');
   }
   
   console.log('=== End Self-Checks ===');
